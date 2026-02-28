@@ -12,19 +12,25 @@ A fast, lightweight desktop Markdown viewer built with Tauri v2 + React.
 - macOS-native overlay titlebar
 - Keyboard shortcuts: `Cmd+O` open, `Cmd+\` toggle sidebar, `A+/A-` zoom
 
-## Download
+## Install
 
-Grab the latest release from the [Releases page](https://github.com/MichaelZuo-AI/Markdown-Viewer/releases):
+### Homebrew (recommended)
+
+```bash
+brew tap MichaelZuo-AI/tap
+brew install --cask md-viewer
+```
+
+### Manual Download
+
+Grab the `.dmg` from the [Releases page](https://github.com/MichaelZuo-AI/Markdown-Viewer/releases):
 
 | Platform | File |
 |---|---|
 | macOS (Apple Silicon) | `MD Viewer_x.x.x_aarch64.dmg` |
 
-### Install (macOS)
-
-1. Download the `.dmg` file from [Releases](https://github.com/MichaelZuo-AI/Markdown-Viewer/releases)
-2. Open the `.dmg` and drag **MD Viewer** to your Applications folder
-3. On first launch: right-click the app → **Open** (required once for macOS Gatekeeper)
+1. Open the `.dmg` and drag **MD Viewer** to your Applications folder
+2. On first launch: right-click the app → **Open** (required once for macOS Gatekeeper)
 
 ## Build from Source
 
