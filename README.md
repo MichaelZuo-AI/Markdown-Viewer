@@ -66,6 +66,27 @@ The first build takes a few minutes to compile Rust dependencies. Subsequent bui
 | Markdown | [marked](https://marked.js.org/) + [highlight.js](https://highlightjs.org/) |
 | State | [Zustand](https://zustand-demo.pmnd.rs/) |
 
+## Changelog
+
+### v0.3.0
+
+- macOS file association — register as handler for `.md` and `.markdown` files, supports both cold start and warm open
+- Widened file-system read scope for files opened from any location
+- Extension filtering on Rust side for defense in depth
+- Mutex poison recovery and race condition fix for robustness
+- 27 new tests (15 Rust + 12 frontend) for file-open code paths
+
+### v0.2.0
+
+- Initial release
+- Dark/light theme with custom typography
+- Syntax-highlighted code blocks with copy button
+- Auto-generated table of contents with scroll-spy
+- Reading progress bar and word count
+- Drag-and-drop, paste, and native file dialog
+- macOS-native overlay titlebar
+- Keyboard shortcuts
+
 ## License
 
 [MIT](LICENSE)
