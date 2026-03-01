@@ -2,6 +2,10 @@
 
 A fast, lightweight desktop Markdown viewer built with Tauri v2 + React.
 
+## Why
+
+AI tools like Claude, ChatGPT, and Copilot think and respond in Markdown — structured documents full of headings, code blocks, tables, and nested lists. To truly understand AI's reasoning process and make sense of its output, you need a reader that renders Markdown beautifully, not a plain-text editor. MD Viewer is built for exactly that.
+
 ## Features
 
 - Dark/light theme with beautiful typography (Lora, DM Sans, JetBrains Mono)
