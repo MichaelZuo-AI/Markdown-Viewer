@@ -13,6 +13,7 @@ AI tools like Claude, ChatGPT, and Copilot think and respond in Markdown — str
 - Auto-generated table of contents with scroll-spy
 - Reading progress bar and word count
 - Drag-and-drop or paste markdown files
+- macOS file association — set as default app for `.md` files
 - macOS-native overlay titlebar
 - Keyboard shortcuts: `Cmd+O` open, `Cmd+\` toggle sidebar, `A+/A-` zoom
 

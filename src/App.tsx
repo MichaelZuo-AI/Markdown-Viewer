@@ -96,22 +96,24 @@ export default function App() {
     return () => window.removeEventListener("paste", onPaste);
   }, [loadMarkdown]);
 
-  // Cold start: check if the app was launched by opening a file
-  useEffect(() => {
-    invoke<string[]>("get_opened_files").then((paths) => {
-      if (paths.length > 0) {
-        readDroppedFile(paths[0]);
-      }
-    });
-  }, []);
-
-  // Warm open: listen for file-open events from macOS
+  // File association: listen for OS file-open events + drain cold-start buffer.
+  // Register the event listener BEFORE calling get_opened_files so no events
+  // are lost between setting frontend_ready and attaching the listener.
   useEffect(() => {
     const unlisten = listen<string[]>("file-open", (event) => {
       if (event.payload.length > 0) {
         readDroppedFile(event.payload[0]);
       }
     });
+
+    invoke<string[]>("get_opened_files")
+      .then((paths) => {
+        if (paths.length > 0) {
+          readDroppedFile(paths[0]);
+        }
+      })
+      .catch((err) => console.error("get_opened_files failed:", err));
+
     return () => {
       unlisten.then((fn) => fn());
     };

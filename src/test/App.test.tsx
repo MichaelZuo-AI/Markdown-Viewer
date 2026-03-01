@@ -16,7 +16,10 @@
 import { describe, it, expect, beforeEach, vi, afterEach, type Mock } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useAppStore } from "@/store/appStore";
+import * as fileOps from "@/lib/fileOps";
 import App from "@/App";
 
 // ---- mock helpers -----------------------------------------------------------
@@ -354,5 +357,230 @@ describe("App — Tauri drag-drop integration", () => {
     });
 
     expect(useAppStore.getState().isDragOver).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("App — cold start: invoke('get_opened_files')", () => {
+  // These tests verify the useEffect that runs once on mount and calls the
+  // Tauri command to drain any paths buffered before the frontend was ready.
+
+  beforeEach(() => {
+    resetStore();
+    vi.clearAllMocks();
+  });
+
+  it("calls invoke with 'get_opened_files' on mount", async () => {
+    (invoke as Mock).mockResolvedValueOnce([]);
+
+    render(<App />);
+    await act(async () => {});
+
+    expect(invoke).toHaveBeenCalledWith("get_opened_files");
+  });
+
+  it("calls invoke exactly once per mount", async () => {
+    (invoke as Mock).mockResolvedValueOnce([]);
+
+    render(<App />);
+    await act(async () => {});
+
+    const invokeCalls = (invoke as Mock).mock.calls.filter(
+      (args: unknown[]) => args[0] === "get_opened_files",
+    );
+    expect(invokeCalls).toHaveLength(1);
+  });
+
+  it("calls readDroppedFile with the first path when invoke returns a non-empty list", async () => {
+    const paths = ["/Users/mike/notes.md", "/Users/mike/other.md"];
+    (invoke as Mock).mockResolvedValueOnce(paths);
+
+    const spy = vi.spyOn(fileOps, "readDroppedFile").mockResolvedValueOnce(undefined);
+
+    render(<App />);
+    await act(async () => {});
+
+    expect(spy).toHaveBeenCalledOnce();
+    expect(spy).toHaveBeenCalledWith(paths[0]);
+
+    spy.mockRestore();
+  });
+
+  it("only opens the first path when invoke returns multiple paths", async () => {
+    const paths = ["/a.md", "/b.md", "/c.md"];
+    (invoke as Mock).mockResolvedValueOnce(paths);
+
+    const spy = vi.spyOn(fileOps, "readDroppedFile").mockResolvedValue(undefined);
+
+    render(<App />);
+    await act(async () => {});
+
+    expect(spy).toHaveBeenCalledOnce();
+
+    spy.mockRestore();
+  });
+
+  it("does not call readDroppedFile when invoke returns an empty array", async () => {
+    (invoke as Mock).mockResolvedValueOnce([]);
+
+    const spy = vi.spyOn(fileOps, "readDroppedFile");
+
+    render(<App />);
+    await act(async () => {});
+
+    expect(spy).not.toHaveBeenCalled();
+
+    spy.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("App — warm open: listen('file-open')", () => {
+  // These tests verify the useEffect that registers a persistent Tauri event
+  // listener so files opened while the app is already running are handled.
+
+  beforeEach(() => {
+    resetStore();
+    vi.clearAllMocks();
+  });
+
+  it("calls listen with 'file-open' on mount", async () => {
+    (listen as Mock).mockResolvedValueOnce(vi.fn());
+
+    render(<App />);
+    await act(async () => {});
+
+    expect(listen).toHaveBeenCalledWith("file-open", expect.any(Function));
+  });
+
+  it("registers exactly one 'file-open' listener per mount", async () => {
+    (listen as Mock).mockResolvedValueOnce(vi.fn());
+
+    render(<App />);
+    await act(async () => {});
+
+    const listenCalls = (listen as Mock).mock.calls.filter(
+      (args: unknown[]) => args[0] === "file-open",
+    );
+    expect(listenCalls).toHaveLength(1);
+  });
+
+  it("calls the unlisten function returned by listen on unmount", async () => {
+    const mockUnlisten = vi.fn();
+    (listen as Mock).mockResolvedValueOnce(mockUnlisten);
+
+    const { unmount } = render(<App />);
+    await act(async () => {});
+
+    unmount();
+    // The cleanup calls unlisten.then(fn => fn()), so we give it a tick
+    await act(async () => {});
+
+    expect(mockUnlisten).toHaveBeenCalledOnce();
+  });
+
+  it("calls readDroppedFile with the first path when a file-open event fires", async () => {
+    let capturedHandler: ((event: { payload: string[] }) => void) | undefined;
+
+    (listen as Mock).mockImplementationOnce(
+      (_event: string, handler: typeof capturedHandler) => {
+        capturedHandler = handler;
+        return Promise.resolve(vi.fn());
+      },
+    );
+
+    const spy = vi.spyOn(fileOps, "readDroppedFile").mockResolvedValueOnce(undefined);
+
+    render(<App />);
+    await act(async () => {});
+
+    act(() => {
+      capturedHandler?.({ payload: ["/Users/mike/warm.md"] });
+    });
+
+    expect(spy).toHaveBeenCalledOnce();
+    expect(spy).toHaveBeenCalledWith("/Users/mike/warm.md");
+
+    spy.mockRestore();
+  });
+
+  it("only opens the first path when file-open payload contains multiple paths", async () => {
+    let capturedHandler: ((event: { payload: string[] }) => void) | undefined;
+
+    (listen as Mock).mockImplementationOnce(
+      (_event: string, handler: typeof capturedHandler) => {
+        capturedHandler = handler;
+        return Promise.resolve(vi.fn());
+      },
+    );
+
+    const spy = vi.spyOn(fileOps, "readDroppedFile").mockResolvedValue(undefined);
+
+    render(<App />);
+    await act(async () => {});
+
+    act(() => {
+      capturedHandler?.({ payload: ["/a.md", "/b.md"] });
+    });
+
+    expect(spy).toHaveBeenCalledOnce();
+    expect(spy).toHaveBeenCalledWith("/a.md");
+
+    spy.mockRestore();
+  });
+
+  it("does not call readDroppedFile when file-open payload is empty", async () => {
+    let capturedHandler: ((event: { payload: string[] }) => void) | undefined;
+
+    (listen as Mock).mockImplementationOnce(
+      (_event: string, handler: typeof capturedHandler) => {
+        capturedHandler = handler;
+        return Promise.resolve(vi.fn());
+      },
+    );
+
+    const spy = vi.spyOn(fileOps, "readDroppedFile");
+
+    render(<App />);
+    await act(async () => {});
+
+    act(() => {
+      capturedHandler?.({ payload: [] });
+    });
+
+    expect(spy).not.toHaveBeenCalled();
+
+    spy.mockRestore();
+  });
+
+  it("handles multiple sequential file-open events independently", async () => {
+    let capturedHandler: ((event: { payload: string[] }) => void) | undefined;
+
+    (listen as Mock).mockImplementationOnce(
+      (_event: string, handler: typeof capturedHandler) => {
+        capturedHandler = handler;
+        return Promise.resolve(vi.fn());
+      },
+    );
+
+    const spy = vi.spyOn(fileOps, "readDroppedFile").mockResolvedValue(undefined);
+
+    render(<App />);
+    await act(async () => {});
+
+    act(() => {
+      capturedHandler?.({ payload: ["/first.md"] });
+    });
+    act(() => {
+      capturedHandler?.({ payload: ["/second.md"] });
+    });
+
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(spy).toHaveBeenNthCalledWith(1, "/first.md");
+    expect(spy).toHaveBeenNthCalledWith(2, "/second.md");
+
+    spy.mockRestore();
   });
 });

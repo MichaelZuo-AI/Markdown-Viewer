@@ -25,6 +25,12 @@ pub fn run() {
             let paths: Vec<String> = urls
                 .iter()
                 .filter_map(|url| url.to_file_path().ok())
+                .filter(|p| {
+                    matches!(
+                        p.extension().and_then(|e| e.to_str()),
+                        Some("md" | "markdown")
+                    )
+                })
                 .filter_map(|p| p.to_str().map(String::from))
                 .collect();
 
@@ -36,8 +42,8 @@ pub fn run() {
             if state.frontend_ready.load(Ordering::SeqCst) {
                 let _ = app_handle.emit("file-open", &paths);
             } else {
-                let mut pending = state.pending.lock().unwrap();
-                pending.extend(paths);
+                let mut pending = state.pending.lock().unwrap_or_else(|e| e.into_inner());
+                *pending = paths;
             }
         }
     });
