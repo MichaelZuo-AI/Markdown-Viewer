@@ -2,6 +2,12 @@ import "@testing-library/jest-dom";
 import { afterEach, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
 
+// Polyfill requestAnimationFrame / cancelAnimationFrame for jsdom
+if (typeof globalThis.requestAnimationFrame === "undefined") {
+  globalThis.requestAnimationFrame = (cb: FrameRequestCallback) => setTimeout(() => cb(Date.now()), 0) as unknown as number;
+  globalThis.cancelAnimationFrame = (id: number) => clearTimeout(id);
+}
+
 // Clean up the DOM after every test
 afterEach(() => {
   cleanup();
@@ -32,4 +38,17 @@ vi.mock("@tauri-apps/api/core", () => ({
 
 vi.mock("@tauri-apps/api/event", () => ({
   listen: vi.fn(() => Promise.resolve(vi.fn())),
+}));
+
+// ---------------------------------------------------------------------------
+// Mock mermaid — the real library requires a browser canvas context and web
+// workers that are unavailable in jsdom.  Tests that import MarkdownRenderer
+// can inspect these mocks directly via vi.mocked(mermaid).
+// ---------------------------------------------------------------------------
+
+vi.mock("mermaid", () => ({
+  default: {
+    initialize: vi.fn(),
+    run: vi.fn(() => Promise.resolve()),
+  },
 }));

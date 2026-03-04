@@ -159,6 +159,115 @@ describe("parseMarkdown — code block renderer", () => {
   });
 });
 
+// ---- mermaid code block renderer --------------------------------------------
+
+describe("parseMarkdown — mermaid code blocks", () => {
+  it("outputs a <div class=\"mermaid\"> instead of a <pre> block", () => {
+    const md = "```mermaid\ngraph TD; A-->B;\n```";
+    const html = parseMarkdown(md);
+    expect(html).toContain('<div class="mermaid">');
+  });
+
+  it("does NOT wrap mermaid source in <pre> or <code>", () => {
+    const md = "```mermaid\ngraph TD; A-->B;\n```";
+    const html = parseMarkdown(md);
+    expect(html).not.toContain("<pre");
+    expect(html).not.toContain("<code");
+  });
+
+  it("includes the diagram source text inside the div", () => {
+    const md = "```mermaid\ngraph TD; A-->B;\n```";
+    const html = parseMarkdown(md);
+    expect(html).toContain("graph TD; A--&gt;B;");
+  });
+
+  it("HTML-escapes '<' characters in the diagram source", () => {
+    const md = "```mermaid\nA-->B: <label>\n```";
+    const html = parseMarkdown(md);
+    expect(html).toContain("&lt;label&gt;");
+    expect(html).not.toContain("<label>");
+  });
+
+  it("HTML-escapes '&' characters in the diagram source", () => {
+    const md = "```mermaid\nnote: A & B\n```";
+    const html = parseMarkdown(md);
+    expect(html).toContain("A &amp; B");
+  });
+
+  it("preserves '\"' characters in the diagram source (DOMPurify normalises &quot; back to \")", () => {
+    // escapeHtml() converts " → &quot;, but DOMPurify then normalises &quot;
+    // back to a literal " in text content.  The net result is that the source
+    // text survives the round-trip with its original double-quote characters.
+    const md = '```mermaid\nA["quoted label"]\n```';
+    const html = parseMarkdown(md);
+    expect(html).toContain('A["quoted label"]');
+  });
+
+  it("DOMPurify does NOT strip the class=\"mermaid\" attribute", () => {
+    const md = "```mermaid\ngraph LR; X-->Y;\n```";
+    const html = parseMarkdown(md);
+    // DOMPurify must not remove the class attribute — it is added to ADD_ATTR
+    expect(html).toMatch(/class="mermaid"/);
+  });
+
+  it("handles a multi-line mermaid diagram", () => {
+    const md = [
+      "```mermaid",
+      "sequenceDiagram",
+      "    Alice->>Bob: Hello",
+      "    Bob-->>Alice: Hi",
+      "```",
+    ].join("\n");
+    const html = parseMarkdown(md);
+    expect(html).toContain('<div class="mermaid">');
+    expect(html).toContain("sequenceDiagram");
+    expect(html).toContain("Alice");
+    expect(html).toContain("Bob");
+  });
+
+  it("handles an empty mermaid block without crashing", () => {
+    const md = "```mermaid\n```";
+    const html = parseMarkdown(md);
+    // Empty body — div is still present (may be self-closing or have empty content)
+    expect(html).toContain("mermaid");
+    expect(typeof html).toBe("string");
+  });
+
+  it("does NOT include a copy button or code-header for mermaid blocks", () => {
+    const md = "```mermaid\ngraph TD; A-->B;\n```";
+    const html = parseMarkdown(md);
+    expect(html).not.toContain("copy-btn");
+    expect(html).not.toContain("code-header");
+    expect(html).not.toContain("data-copy");
+  });
+
+  it("treats 'Mermaid' (wrong case) as a regular code block, not mermaid", () => {
+    // The renderer checks lang === "mermaid" exactly — uppercase must fall through
+    const md = "```Mermaid\ngraph TD; A-->B;\n```";
+    const html = parseMarkdown(md);
+    // Should be treated as an unknown lang and fall to the highlight.js path
+    expect(html).toContain("<pre");
+    expect(html).not.toContain('<div class="mermaid">');
+  });
+
+  it("a non-mermaid fenced block still renders as <pre> after a mermaid block", () => {
+    const md = [
+      "```mermaid",
+      "graph TD; A-->B;",
+      "```",
+      "",
+      "```js",
+      "const x = 1;",
+      "```",
+    ].join("\n");
+    const html = parseMarkdown(md);
+    expect(html).toContain('<div class="mermaid">');
+    expect(html).toContain("<pre");
+    // hljs registers the language as "js" so the class is language-js
+    expect(html).toContain("language-js");
+  });
+});
+
 // ---- standard markdown features (GFM / breaks) ------------------------------
 
 describe("parseMarkdown — standard markdown features", () => {

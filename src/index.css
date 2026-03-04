@@ -395,6 +395,31 @@ body {
 
 .content input[type="checkbox"] { margin-right: 6px; }
 
+/* ── Mermaid diagrams ── */
+.content .mermaid {
+  display: flex;
+  justify-content: center;
+  margin: 1.5em 0;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow-x: auto;
+}
+
+.content .mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.content .mermaid.mermaid-error {
+  color: var(--accent2);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  white-space: pre-wrap;
+  border-color: var(--accent2);
+}
+
 /* ── Progress bar ── */
 .progress {
   position: fixed; top: 0; left: 0;

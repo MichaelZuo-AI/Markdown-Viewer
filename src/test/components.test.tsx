@@ -11,7 +11,7 @@
  * exercising the real component logic and store subscriptions.
  */
 
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, vi, type Mock } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { useAppStore } from "@/store/appStore";
 import ProgressBar from "@/components/ProgressBar";
@@ -19,6 +19,7 @@ import DropZone from "@/components/DropZone";
 import Toolbar from "@/components/Toolbar";
 import MarkdownRenderer from "@/components/MarkdownRenderer";
 import Sidebar from "@/components/Sidebar";
+import mermaid from "mermaid";
 
 // ---- helpers ----------------------------------------------------------------
 
@@ -341,6 +342,210 @@ describe("MarkdownRenderer", () => {
     const { container } = render(<MarkdownRenderer />);
     const copyBtn = container.querySelector("[data-copy]") as HTMLButtonElement;
     expect(copyBtn.textContent).toBe("Copy");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MarkdownRenderer — mermaid integration
+//
+// mermaid is mocked in setup.ts:  { initialize: vi.fn(), run: vi.fn(...) }
+// We verify that the component interacts with the mermaid API correctly
+// without running the real mermaid library (which requires canvas / workers).
+// ---------------------------------------------------------------------------
+
+// Helper: flush requestAnimationFrame + dynamic import microtasks
+async function flushMermaid() {
+  // Wait for rAF (polyfilled as setTimeout(0)) and dynamic import() to resolve
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 10));
+  });
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 10));
+  });
+}
+
+describe("MarkdownRenderer — mermaid rendering", () => {
+  beforeEach(() => {
+    resetStore();
+    vi.clearAllMocks();
+    // Restore data-theme to dark (default) before each test
+    document.documentElement.removeAttribute("data-theme");
+  });
+
+  // -- DOM structure ----------------------------------------------------------
+
+  it("renders a .mermaid div in the DOM when htmlContent contains one", () => {
+    useAppStore.setState({
+      htmlContent: '<div class="mermaid">graph TD; A--&gt;B;</div>',
+    });
+    const { container } = render(<MarkdownRenderer />);
+    expect(container.querySelector(".mermaid")).toBeInTheDocument();
+  });
+
+  it("renders multiple .mermaid divs when htmlContent contains several", () => {
+    useAppStore.setState({
+      htmlContent: [
+        '<div class="mermaid">graph TD; A--&gt;B;</div>',
+        '<div class="mermaid">sequenceDiagram; Alice-&gt;&gt;Bob: Hi</div>',
+      ].join(""),
+    });
+    const { container } = render(<MarkdownRenderer />);
+    expect(container.querySelectorAll(".mermaid")).toHaveLength(2);
+  });
+
+  it("does NOT render a .mermaid div when htmlContent has none", () => {
+    useAppStore.setState({ htmlContent: "<p>No diagram here.</p>" });
+    const { container } = render(<MarkdownRenderer />);
+    expect(container.querySelector(".mermaid")).toBeNull();
+  });
+
+  // -- mermaid.run() call -----------------------------------------------------
+
+  it("calls mermaid.run() with the .mermaid nodes when content contains a diagram", async () => {
+    useAppStore.setState({
+      htmlContent: '<div class="mermaid">graph TD; A--&gt;B;</div>',
+    });
+    render(<MarkdownRenderer />);
+    await flushMermaid();
+    expect(mermaid.run).toHaveBeenCalled();
+    const callArg = (mermaid.run as Mock).mock.calls[0][0] as { nodes: HTMLElement[] };
+    expect(callArg.nodes).toHaveLength(1);
+    expect(callArg.nodes[0].classList.contains("mermaid")).toBe(true);
+  });
+
+  it("does NOT call mermaid.run() when htmlContent contains no .mermaid elements", async () => {
+    useAppStore.setState({ htmlContent: "<p>Just text.</p>" });
+    render(<MarkdownRenderer />);
+    await flushMermaid();
+    expect(mermaid.run).not.toHaveBeenCalled();
+  });
+
+  it("does NOT call mermaid.run() when htmlContent is empty", async () => {
+    useAppStore.setState({ htmlContent: "" });
+    render(<MarkdownRenderer />);
+    await flushMermaid();
+    expect(mermaid.run).not.toHaveBeenCalled();
+  });
+
+  it("calls mermaid.run() again when htmlContent changes to include a new diagram", async () => {
+    useAppStore.setState({ htmlContent: "<p>No diagram.</p>" });
+    render(<MarkdownRenderer />);
+    await flushMermaid();
+    expect(mermaid.run).not.toHaveBeenCalled();
+
+    await act(async () => {
+      useAppStore.setState({
+        htmlContent: '<div class="mermaid">graph LR; X--&gt;Y;</div>',
+      });
+    });
+    await flushMermaid();
+    expect(mermaid.run).toHaveBeenCalled();
+  });
+
+  // -- mermaid.initialize() call and theme ------------------------------------
+
+  it("calls mermaid.initialize() with startOnLoad: false", async () => {
+    useAppStore.setState({
+      htmlContent: '<div class="mermaid">graph TD; A--&gt;B;</div>',
+    });
+    render(<MarkdownRenderer />);
+    await flushMermaid();
+    expect(mermaid.initialize).toHaveBeenCalled();
+    const initArg = (mermaid.initialize as Mock).mock.calls[0][0] as Record<string, unknown>;
+    expect(initArg.startOnLoad).toBe(false);
+  });
+
+  it("calls mermaid.initialize() with securityLevel: 'strict'", async () => {
+    useAppStore.setState({
+      htmlContent: '<div class="mermaid">graph TD; A--&gt;B;</div>',
+    });
+    render(<MarkdownRenderer />);
+    await flushMermaid();
+    const initArg = (mermaid.initialize as Mock).mock.calls[0][0] as Record<string, unknown>;
+    expect(initArg.securityLevel).toBe("strict");
+  });
+
+  it("passes theme 'dark' to mermaid.initialize() when data-theme is not 'light'", async () => {
+    document.documentElement.removeAttribute("data-theme");
+    useAppStore.setState({
+      htmlContent: '<div class="mermaid">graph TD; A--&gt;B;</div>',
+    });
+    render(<MarkdownRenderer />);
+    await flushMermaid();
+    const initArg = (mermaid.initialize as Mock).mock.calls[0][0] as Record<string, unknown>;
+    expect(initArg.theme).toBe("dark");
+  });
+
+  it("passes theme 'default' to mermaid.initialize() when data-theme is 'light'", async () => {
+    document.documentElement.setAttribute("data-theme", "light");
+    useAppStore.setState({
+      htmlContent: '<div class="mermaid">graph TD; A--&gt;B;</div>',
+    });
+    render(<MarkdownRenderer />);
+    await flushMermaid();
+    const initArg = (mermaid.initialize as Mock).mock.calls[0][0] as Record<string, unknown>;
+    expect(initArg.theme).toBe("default");
+  });
+
+  // -- data-processed removal -------------------------------------------------
+
+  it("removes the data-processed attribute from .mermaid nodes before calling run()", async () => {
+    // Simulate a node that was previously processed by mermaid
+    useAppStore.setState({
+      htmlContent: '<div class="mermaid" data-processed="true">graph TD; A--&gt;B;</div>',
+    });
+    const { container } = render(<MarkdownRenderer />);
+    await flushMermaid();
+
+    // By the time run() is called the attribute should be gone
+    const node = container.querySelector(".mermaid") as HTMLElement;
+    expect(node.hasAttribute("data-processed")).toBe(false);
+  });
+
+  // -- theme change via MutationObserver ---------------------------------------
+
+  it("re-calls mermaid.initialize() and mermaid.run() when data-theme attribute changes", async () => {
+    useAppStore.setState({
+      htmlContent: '<div class="mermaid">graph TD; A--&gt;B;</div>',
+    });
+    render(<MarkdownRenderer />);
+    await flushMermaid();
+
+    // Record calls from the initial render
+    const initCallsBefore = (mermaid.initialize as Mock).mock.calls.length;
+    const runCallsBefore = (mermaid.run as Mock).mock.calls.length;
+
+    // Simulate a theme change that the MutationObserver observes
+    await act(async () => {
+      document.documentElement.setAttribute("data-theme", "light");
+    });
+    await flushMermaid();
+
+    expect((mermaid.initialize as Mock).mock.calls.length).toBeGreaterThan(initCallsBefore);
+    expect((mermaid.run as Mock).mock.calls.length).toBeGreaterThan(runCallsBefore);
+  });
+
+  it("disconnects the MutationObserver when the component unmounts", async () => {
+    const disconnectSpy = vi.spyOn(MutationObserver.prototype, "disconnect");
+    useAppStore.setState({ htmlContent: "" });
+
+    const { unmount } = render(<MarkdownRenderer />);
+    unmount();
+
+    expect(disconnectSpy).toHaveBeenCalled();
+    disconnectSpy.mockRestore();
+  });
+
+  // -- error resilience -------------------------------------------------------
+
+  it("does not throw when mermaid.run() rejects (error is caught internally)", async () => {
+    (mermaid.run as Mock).mockRejectedValueOnce(new Error("parse error"));
+    useAppStore.setState({
+      htmlContent: '<div class="mermaid">invalid diagram</div>',
+    });
+
+    render(<MarkdownRenderer />);
+    await expect(flushMermaid()).resolves.not.toThrow();
   });
 });
 

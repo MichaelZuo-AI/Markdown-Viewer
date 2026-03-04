@@ -13,6 +13,13 @@ function escapeHtml(str: string): string {
 const renderer = {
   code(code: string, infostring: string | undefined): string {
     const lang = infostring || "";
+
+    if (lang === "mermaid") {
+      // escapeHtml prevents XSS in raw HTML; browser decodes entities back
+    // in .textContent which mermaid reads for parsing
+    return `<div class="mermaid">${escapeHtml(code)}</div>`;
+    }
+
     const validLang = lang && hljs.getLanguage(lang) ? lang : "plaintext";
     const highlighted = hljs.highlight(code, { language: validLang }).value;
     const langLabel = escapeHtml(lang || "text");
