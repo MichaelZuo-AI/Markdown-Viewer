@@ -530,12 +530,14 @@ body::after {
 
 /* ── Toolbar ─────────────────────────────────── */
 .toolbar {
-  height: calc(48px + var(--titlebar-height));
+  height: calc(52px + var(--titlebar-height));
   padding-top: var(--titlebar-height);
   border-bottom: 1px solid var(--border);
-  display: flex; align-items: center;
-  padding-left: 20px; padding-right: 20px;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: auto minmax(160px, 1fr) auto;
+  align-items: center;
+  column-gap: 12px;
+  padding-left: 16px; padding-right: 16px;
   background: var(--glass);
   position: relative;
   overflow: hidden;
@@ -567,15 +569,55 @@ body::after {
   animation: command-sweep 6s cubic-bezier(.6,.05,.2,1) infinite;
 }
 
+.toolbar > * {
+  position: relative;
+  z-index: 1;
+}
+
+.toolbar-primary,
+.toolbar-actions,
+.toolbar-group {
+  display: flex;
+  align-items: center;
+}
+
+.toolbar-actions {
+  justify-self: end;
+  min-width: 0;
+  gap: 8px;
+}
+
+.toolbar-group {
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--surface) 46%, transparent);
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--text) 6%, transparent) inset;
+  flex: 0 0 auto;
+}
+
+.toolbar-document {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  padding: 0 16px;
+  pointer-events: none;
+}
+
 .tb-btn {
-  width: 30px; height: 30px;
+  width: 34px; height: 34px;
+  flex: 0 0 34px;
   background: color-mix(in srgb, var(--surface-2) 52%, transparent);
   border: 1px solid transparent;
   color: var(--text-muted);
   cursor: pointer;
   border-radius: var(--radius);
   display: flex; align-items: center; justify-content: center;
-  font-size: 14px;
+  font-size: 15px;
   transition: all 0.16s cubic-bezier(.6,.05,.2,1);
   position: relative;
   overflow: hidden;
@@ -608,8 +650,18 @@ body::after {
 .tb-btn-active { color: var(--accent); }
 .tb-btn-active::after { width: 16px; }
 
+.tb-btn-text {
+  width: auto;
+  min-width: 42px;
+  padding: 0 9px;
+  flex-basis: auto;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+}
+
 .file-name {
-  flex: 1;
+  width: 100%;
   font-family: var(--font-display);
   font-style: italic;
   font-variation-settings: "opsz" 24, "SOFT" 60;
@@ -628,6 +680,75 @@ body::after {
   text-transform: uppercase;
   color: var(--text-dim);
   white-space: nowrap;
+}
+
+@media (max-width: 860px) {
+  .toolbar {
+    grid-template-columns: auto minmax(80px, 1fr) auto;
+    column-gap: 8px;
+    padding-left: 10px; padding-right: 10px;
+  }
+
+  .toolbar-document {
+    padding: 0 8px;
+  }
+
+  .toolbar-actions {
+    gap: 5px;
+  }
+
+  .toolbar-group {
+    gap: 2px;
+    padding: 2px;
+  }
+
+  .tb-btn {
+    width: 30px; height: 30px;
+    flex-basis: 30px;
+  }
+
+  .tb-btn-text {
+    min-width: 36px;
+    padding: 0 7px;
+  }
+
+  .word-count {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .toolbar {
+    grid-template-columns: auto 1fr;
+    column-gap: 6px;
+  }
+
+  .toolbar-document {
+    display: none;
+  }
+
+  .toolbar-actions {
+    gap: 3px;
+  }
+
+  .toolbar-group {
+    gap: 1px;
+  }
+
+  .tb-btn {
+    width: 28px; height: 28px;
+    flex-basis: 28px;
+    font-size: 14px;
+  }
+
+  .tb-btn-text {
+    min-width: 38px;
+    padding: 0 6px;
+  }
+
+  .toolbar-keybinding {
+    display: none;
+  }
 }
 
 /* ── Tab bar ─────────────────────────────────── */

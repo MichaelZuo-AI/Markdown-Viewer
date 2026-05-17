@@ -88,6 +88,12 @@ The first build takes a few minutes to compile Rust dependencies. Subsequent bui
 
 ## Changelog
 
+### v0.19.1
+
+- Refine the top toolbar into clear command groups so document status, search, export, zoom, and theme controls no longer feel compressed
+- Replace the clipped Preferences text button with an icon-only control while preserving the accessible label
+- Add responsive toolbar behavior for compact windows, including hidden reading stats and protected text-button widths
+
 ### v0.19.0
 
 - Add project folder workflow with recursive Markdown/text indexing, sidebar file tree, quick-open loading, and project search

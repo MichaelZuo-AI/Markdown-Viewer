@@ -213,10 +213,8 @@ describe("Toolbar", () => {
 
   it("shows no word-count stats when wordCount is 0", () => {
     useAppStore.setState({ wordCount: 0 });
-    render(<Toolbar />);
-    // The word-count span should be empty
-    const span = screen.getByText("", { selector: ".word-count" });
-    expect(span.textContent).toBe("");
+    const { container } = render(<Toolbar />);
+    expect(container.querySelector(".word-count")).toBeNull();
   });
 
   it("shows word count stats when wordCount > 0", () => {
