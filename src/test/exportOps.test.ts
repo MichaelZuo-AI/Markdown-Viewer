@@ -123,6 +123,24 @@ describe("exportToHtml", () => {
     expect(writtenHtml).toContain("data:image/png;base64,AAEC");
   });
 
+  it("uses the export theme preference instead of the current app theme when configured", async () => {
+    useAppStore.setState({
+      theme: "dark",
+      preferences: {
+        ...useAppStore.getState().preferences,
+        exportTheme: "light",
+      },
+    });
+    mockSave.mockResolvedValueOnce("/path/test.html");
+    mockWriteTextFile.mockResolvedValueOnce(undefined);
+
+    await exportToHtml();
+
+    const writtenHtml = mockWriteTextFile.mock.calls[0][1] as string;
+    expect(writtenHtml).toContain('<html lang="en" data-theme="light">');
+    expect(writtenHtml).toContain("background: #f8f7f4");
+  });
+
   it("shows toast on write error", async () => {
     mockSave.mockResolvedValueOnce("/path/test.html");
     mockWriteTextFile.mockRejectedValueOnce(new Error("disk full"));

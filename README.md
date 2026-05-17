@@ -17,6 +17,9 @@ AI tools like Claude, ChatGPT, and Copilot think and respond in Markdown — str
 - **Export to HTML** — standalone file with embedded styles
 - **Export to PDF** — via system print dialog
 - **Recent files** — quick access from the sidebar
+- **Project folders** — open a folder, browse Markdown files, quick-open, and search across the project
+- **Command palette** — run common actions from `Cmd+Shift+P`
+- **Preferences** — configure theme, keybindings, autosave, split defaults, and export theme
 - **Auto-save drafts** — never lose unsaved work
 - Dark/light theme with beautiful typography (Lora, DM Sans, JetBrains Mono)
 - Syntax-highlighted code blocks with one-click copy
@@ -29,7 +32,7 @@ AI tools like Claude, ChatGPT, and Copilot think and respond in Markdown — str
 - macOS file association — set as default app for `.md` files
 - macOS-native overlay titlebar
 - Print-ready output (`Cmd+P`)
-- Keyboard shortcuts: `Cmd+O` open, `Cmd+E` edit, `Cmd+S` save, `Cmd+F` search, `Cmd+T` new tab, `Cmd+W` close tab, `Cmd+\` toggle sidebar, `Cmd+=`/`Cmd+-` zoom, `Cmd+0` reset zoom, trackpad pinch-to-zoom
+- Keyboard shortcuts: `Cmd+O` open, `Cmd+P` quick open, `Cmd+Shift+P` command palette, `Cmd+F` document search, `Cmd+Shift+F` project search, `Cmd+,` preferences, `Cmd+E` edit, `Cmd+S` save, `Cmd+T` new tab, `Cmd+W` close tab, `Cmd+\` toggle sidebar, `Cmd+=`/`Cmd+-` zoom, `Cmd+0` reset zoom, trackpad pinch-to-zoom
 
 ## Install
 
@@ -84,6 +87,15 @@ The first build takes a few minutes to compile Rust dependencies. Subsequent bui
 | State | [Zustand](https://zustand-demo.pmnd.rs/) |
 
 ## Changelog
+
+### v0.19.0
+
+- Add project folder workflow with recursive Markdown/text indexing, sidebar file tree, and project file loading
+- Add quick open (`Cmd+P`) with fuzzy path matching
+- Add command palette (`Cmd+Shift+P`) for common actions
+- Add project-wide search (`Cmd+Shift+F`) across indexed file contents
+- Add preferences dialog (`Cmd+,`) for theme, keybindings, autosave, split defaults, line breaks, and export theme
+- Add `CONVENTIONS.md` to back the repo-local agent guide
 
 ### v0.15.0
 

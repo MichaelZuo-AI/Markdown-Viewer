@@ -1,8 +1,23 @@
 import { create } from "zustand";
 import { parseMarkdown } from "@/lib/markdown";
+import {
+  buildProjectTree,
+  searchProjectFiles,
+  type ProjectFile,
+  type ProjectSearchResult,
+  type ProjectTreeNode,
+} from "@/lib/projectIndex";
 
 export type Theme = "dark" | "light";
 export type KeybindingMode = "default" | "vim" | "emacs";
+export type ExportTheme = "current" | "light" | "dark";
+
+export interface Preferences {
+  autoSaveToFile: boolean;
+  defaultSplitRatio: number;
+  exportTheme: ExportTheme;
+  markdownLineBreaks: boolean;
+}
 
 export interface RecentFile {
   name: string;
@@ -37,9 +52,24 @@ interface AppState {
   fontSize: number; // percentage 70-140
   searchOpen: boolean;
   splitRatio: number; // editor pane width percentage (20-80)
+  quickOpenOpen: boolean;
+  quickOpenQuery: string;
+  commandPaletteOpen: boolean;
+  globalSearchOpen: boolean;
+  globalSearchQuery: string;
+  preferencesOpen: boolean;
 
   // Editor keybindings
   keybindingMode: KeybindingMode;
+
+  // Project workflow
+  projectRootPath: string;
+  projectFiles: ProjectFile[];
+  projectTree: ProjectTreeNode | null;
+  projectSearchResults: ProjectSearchResult[];
+
+  // Preferences
+  preferences: Preferences;
 
   // Toast
   toastMessage: string;
@@ -71,11 +101,20 @@ interface AppState {
   markClean: () => void;
   toggleSearch: () => void;
   setSearchOpen: (v: boolean) => void;
+  setQuickOpenOpen: (v: boolean) => void;
+  setQuickOpenQuery: (query: string) => void;
+  setCommandPaletteOpen: (v: boolean) => void;
+  setGlobalSearchOpen: (v: boolean) => void;
+  setGlobalSearchQuery: (query: string) => void;
+  setPreferencesOpen: (v: boolean) => void;
   showToast: (message: string) => void;
   dismissToast: () => void;
   setKeybindingMode: (mode: KeybindingMode) => void;
   cycleKeybindingMode: () => void;
   setSplitRatio: (ratio: number) => void;
+  setProject: (rootPath: string, files: ProjectFile[]) => void;
+  clearProject: () => void;
+  setPreferences: (updates: Partial<Preferences>) => void;
   addRecentFile: (name: string, path: string) => void;
   clearRecentFiles: () => void;
   restoreDraft: () => void;
@@ -135,8 +174,41 @@ function persistSession(tabs: Tab[], activeTabId: string): void {
 
 let nextTabId = 1;
 const BALANCED_SPLIT_RATIO = 50;
+const DEFAULT_PREFERENCES: Preferences = {
+  autoSaveToFile: true,
+  defaultSplitRatio: BALANCED_SPLIT_RATIO,
+  exportTheme: "current",
+  markdownLineBreaks: true,
+};
+
 function genTabId(): string {
   return `tab-${nextTabId++}`;
+}
+
+function clampSplitRatio(ratio: number): number {
+  return Math.max(20, Math.min(80, ratio));
+}
+
+function loadPreferences(): Preferences {
+  const raw = safeGetItem("mikedown-preferences");
+  if (!raw) return DEFAULT_PREFERENCES;
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<Preferences>;
+    return {
+      ...DEFAULT_PREFERENCES,
+      ...parsed,
+      defaultSplitRatio: clampSplitRatio(Number(parsed.defaultSplitRatio) || BALANCED_SPLIT_RATIO),
+      exportTheme: parsed.exportTheme === "light" || parsed.exportTheme === "dark" ? parsed.exportTheme : "current",
+    };
+  } catch {
+    safeRemoveItem("mikedown-preferences");
+    return DEFAULT_PREFERENCES;
+  }
+}
+
+function parseContent(content: string, preferences: Preferences): string {
+  return parseMarkdown(content, { breaks: preferences.markdownLineBreaks });
 }
 
 function createEmptyTab(): Tab {
@@ -229,6 +301,7 @@ function clearDraftForSavedTab(tab: Pick<Tab, "fileName" | "filePath" | "markdow
 }
 
 const initialTab = createEmptyTab();
+const initialPreferences = loadPreferences();
 
 export const useAppStore = create<AppState>((set) => ({
   tabs: [initialTab],
@@ -251,9 +324,22 @@ export const useAppStore = create<AppState>((set) => ({
   theme: (safeGetItem("mikedown-theme") as Theme) || "dark",
   fontSize: 100,
   searchOpen: false,
-  splitRatio: Number(safeGetItem("mikedown-split-ratio")) || BALANCED_SPLIT_RATIO,
+  splitRatio: Number(safeGetItem("mikedown-split-ratio")) || initialPreferences.defaultSplitRatio,
+  quickOpenOpen: false,
+  quickOpenQuery: "",
+  commandPaletteOpen: false,
+  globalSearchOpen: false,
+  globalSearchQuery: "",
+  preferencesOpen: false,
 
   keybindingMode: (safeGetItem("mikedown-keybinding") as KeybindingMode) || "default",
+
+  projectRootPath: "",
+  projectFiles: [],
+  projectTree: null,
+  projectSearchResults: [],
+
+  preferences: initialPreferences,
 
   toastMessage: "",
   toastVisible: false,
@@ -261,7 +347,7 @@ export const useAppStore = create<AppState>((set) => ({
   recentFiles: loadRecentFiles(),
 
   loadMarkdown: (content, name, path) => {
-    const html = parseMarkdown(content);
+    const html = parseContent(content, useAppStore.getState().preferences);
     const words = content.trim().split(/\s+/).filter(Boolean).length;
     const readMin = Math.ceil(words / 200);
     const finalName = name || "Untitled";
@@ -381,7 +467,7 @@ export const useAppStore = create<AppState>((set) => ({
     clearTimer(parseTimers, tabId);
     const parseTimer = setTimeout(() => {
       parseTimers.delete(tabId);
-      const html = parseMarkdown(content);
+      const html = parseContent(content, useAppStore.getState().preferences);
       set((s) => {
         if (!s.tabs.some((t) => t.id === tabId)) return {};
         const tabs = updateTabById(s.tabs, tabId, { htmlContent: html });
@@ -412,7 +498,7 @@ export const useAppStore = create<AppState>((set) => ({
       fileAutoSaveTimers.delete(tabId);
       const s = useAppStore.getState();
       const tab = s.tabs.find((t) => t.id === tabId);
-      if (!tab?.filePath || !tab.dirty) return;
+      if (!tab?.filePath || !tab.dirty || !s.preferences.autoSaveToFile) return;
       const contentToSave = tab.markdownContent;
       try {
         const { writeTextFile } = await import("@tauri-apps/plugin-fs");
@@ -447,6 +533,16 @@ export const useAppStore = create<AppState>((set) => ({
 
   toggleSearch: () => set((s) => ({ searchOpen: !s.searchOpen })),
   setSearchOpen: (v) => set({ searchOpen: v }),
+  setQuickOpenOpen: (v) => set({ quickOpenOpen: v, ...(v ? {} : { quickOpenQuery: "" }) }),
+  setQuickOpenQuery: (query) => set({ quickOpenQuery: query }),
+  setCommandPaletteOpen: (v) => set({ commandPaletteOpen: v }),
+  setGlobalSearchOpen: (v) => set({ globalSearchOpen: v }),
+  setGlobalSearchQuery: (query) =>
+    set((s) => ({
+      globalSearchQuery: query,
+      projectSearchResults: searchProjectFiles(s.projectFiles, query),
+    })),
+  setPreferencesOpen: (v) => set({ preferencesOpen: v }),
 
   showToast: (message) => {
     set({ toastMessage: message, toastVisible: true });
@@ -469,10 +565,59 @@ export const useAppStore = create<AppState>((set) => ({
     }),
 
   setSplitRatio: (ratio) => {
-    const clamped = Math.max(20, Math.min(80, ratio));
+    const clamped = clampSplitRatio(ratio);
     safeSetItem("mikedown-split-ratio", String(clamped));
     set({ splitRatio: clamped });
   },
+
+  setProject: (rootPath, files) => {
+    const projectTree = buildProjectTree(rootPath, files);
+    set({
+      projectRootPath: rootPath,
+      projectFiles: files,
+      projectTree,
+      projectSearchResults: [],
+      globalSearchQuery: "",
+    });
+  },
+
+  clearProject: () =>
+    set({
+      projectRootPath: "",
+      projectFiles: [],
+      projectTree: null,
+      projectSearchResults: [],
+      quickOpenOpen: false,
+      quickOpenQuery: "",
+      globalSearchOpen: false,
+      globalSearchQuery: "",
+      commandPaletteOpen: false,
+    }),
+
+  setPreferences: (updates) =>
+    set((s) => {
+      const next: Preferences = {
+        ...s.preferences,
+        ...updates,
+        defaultSplitRatio: updates.defaultSplitRatio !== undefined
+          ? clampSplitRatio(updates.defaultSplitRatio)
+          : s.preferences.defaultSplitRatio,
+      };
+      const lineBreaksChanged =
+        updates.markdownLineBreaks !== undefined &&
+        updates.markdownLineBreaks !== s.preferences.markdownLineBreaks;
+      const tabs = lineBreaksChanged
+        ? s.tabs.map((tab) => ({
+          ...tab,
+          htmlContent: parseContent(tab.markdownContent, next),
+        }))
+        : s.tabs;
+      safeSetItem("mikedown-preferences", JSON.stringify(next));
+      return {
+        preferences: next,
+        ...(lineBreaksChanged ? deriveFromActiveTab(tabs, s.activeTabId) : {}),
+      };
+    }),
 
   addRecentFile: (name, path) => {
     if (!path) return;
@@ -498,7 +643,7 @@ export const useAppStore = create<AppState>((set) => ({
         safeRemoveItem("mikedown-draft");
         return;
       }
-      const html = parseMarkdown(content);
+      const html = parseContent(content, useAppStore.getState().preferences);
       const words = content.trim().split(/\s+/).filter(Boolean).length;
       const readMin = Math.ceil(words / 200);
       set((s) => {
@@ -551,7 +696,8 @@ export const useAppStore = create<AppState>((set) => ({
 
   newMarkdownFile: () =>
     set((s) => {
-      safeSetItem("mikedown-split-ratio", String(BALANCED_SPLIT_RATIO));
+      const preferredSplitRatio = clampSplitRatio(s.preferences.defaultSplitRatio);
+      safeSetItem("mikedown-split-ratio", String(preferredSplitRatio));
       const active = getActiveTab(s);
       const isUntouched = !active.markdownContent && !active.filePath && !active.dirty;
 
@@ -570,7 +716,7 @@ export const useAppStore = create<AppState>((set) => ({
         return {
           ...deriveFromActiveTab(tabs, s.activeTabId),
           editMode: true,
-          splitRatio: BALANCED_SPLIT_RATIO,
+          splitRatio: preferredSplitRatio,
           isDropZoneVisible: false,
         };
       }
@@ -582,7 +728,7 @@ export const useAppStore = create<AppState>((set) => ({
         ...deriveFromActiveTab(tabs, tab.id),
         activeTabId: tab.id,
         editMode: true,
-        splitRatio: BALANCED_SPLIT_RATIO,
+        splitRatio: preferredSplitRatio,
         isDropZoneVisible: false,
       };
     }),

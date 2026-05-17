@@ -15,8 +15,16 @@ import ProgressBar from "@/components/ProgressBar";
 import Editor from "@/components/Editor";
 import TabBar from "@/components/TabBar";
 import Toast from "@/components/Toast";
+import QuickOpen from "@/components/QuickOpen";
+import CommandPalette from "@/components/CommandPalette";
+import GlobalSearch from "@/components/GlobalSearch";
+import PreferencesDialog from "@/components/PreferencesDialog";
 
 const ALLOWED_EXTENSIONS = ["md", "markdown", "txt"];
+
+function isTauriRuntime() {
+  return typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+}
 
 export default function App() {
   const theme = useAppStore((s) => s.theme);
@@ -24,6 +32,10 @@ export default function App() {
   const toggleSidebar = useAppStore((s) => s.toggleSidebar);
   const toggleEditMode = useAppStore((s) => s.toggleEditMode);
   const toggleSearch = useAppStore((s) => s.toggleSearch);
+  const setQuickOpenOpen = useAppStore((s) => s.setQuickOpenOpen);
+  const setCommandPaletteOpen = useAppStore((s) => s.setCommandPaletteOpen);
+  const setGlobalSearchOpen = useAppStore((s) => s.setGlobalSearchOpen);
+  const setPreferencesOpen = useAppStore((s) => s.setPreferencesOpen);
   const loadMarkdown = useAppStore((s) => s.loadMarkdown);
   const setDragOver = useAppStore((s) => s.setDragOver);
   const newMarkdownFile = useAppStore((s) => s.newMarkdownFile);
@@ -59,6 +71,8 @@ export default function App() {
 
   // Tauri drag-drop listener
   useEffect(() => {
+    if (!isTauriRuntime()) return;
+
     let unlisten: (() => void) | undefined;
     let cancelled = false;
 
@@ -101,6 +115,10 @@ export default function App() {
         e.preventDefault();
         openMarkdownFile();
       }
+      if ((e.metaKey || e.ctrlKey) && e.key === ",") {
+        e.preventDefault();
+        setPreferencesOpen(true);
+      }
       if ((e.metaKey || e.ctrlKey) && e.key === "n") {
         e.preventDefault();
         newMarkdownFile();
@@ -117,9 +135,23 @@ export default function App() {
         e.preventDefault();
         toggleEditMode();
       }
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        setGlobalSearchOpen(true);
+        return;
+      }
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        setCommandPaletteOpen(true);
+        return;
+      }
       if ((e.metaKey || e.ctrlKey) && e.key === "f") {
         e.preventDefault();
         toggleSearch();
+      }
+      if ((e.metaKey || e.ctrlKey) && e.key === "p") {
+        e.preventDefault();
+        setQuickOpenOpen(true);
       }
       if ((e.metaKey || e.ctrlKey) && e.key === "t") {
         e.preventDefault();
@@ -141,10 +173,29 @@ export default function App() {
         e.preventDefault();
         useAppStore.setState({ fontSize: 100 });
       }
+      if (e.key === "Escape") {
+        const store = useAppStore.getState();
+        store.setQuickOpenOpen(false);
+        store.setCommandPaletteOpen(false);
+        store.setGlobalSearchOpen(false);
+        store.setPreferencesOpen(false);
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [toggleSidebar, toggleEditMode, toggleSearch, newMarkdownFile, newTab, closeTab, zoom]);
+  }, [
+    toggleSidebar,
+    toggleEditMode,
+    toggleSearch,
+    setQuickOpenOpen,
+    setCommandPaletteOpen,
+    setGlobalSearchOpen,
+    setPreferencesOpen,
+    newMarkdownFile,
+    newTab,
+    closeTab,
+    zoom,
+  ]);
 
   // Trackpad pinch-to-zoom (macOS sends wheel events with ctrlKey for pinch gestures)
   useEffect(() => {
@@ -178,6 +229,8 @@ export default function App() {
 
   // File association: listen for OS file-open events + drain cold-start buffer.
   useEffect(() => {
+    if (!isTauriRuntime()) return;
+
     const unlisten = listen<string[]>("file-open", (event) => {
       if (event.payload.length > 0) {
         readDroppedFile(event.payload[0]);
@@ -203,7 +256,7 @@ export default function App() {
   // (write-to-temp + rename), which replaces the inode the watcher was tracking.
   const filePath = useAppStore((s) => s.filePath);
   useEffect(() => {
-    if (!filePath || editMode) return;
+    if (!isTauriRuntime() || !filePath || editMode) return;
 
     const dir = filePath.replace(/[/\\][^/\\]*$/, "");
     const basename = filePath.split(/[/\\]/).pop() || "";
@@ -348,6 +401,10 @@ export default function App() {
           </div>
         </div>
       </div>
+      <QuickOpen />
+      <CommandPalette />
+      <GlobalSearch />
+      <PreferencesDialog />
       <Toast />
     </>
   );

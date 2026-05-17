@@ -11,6 +11,7 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { useAppStore } from "@/store/appStore";
+import { toProjectFile } from "@/lib/projectIndex";
 
 // ---- helpers ----------------------------------------------------------------
 
@@ -29,6 +30,22 @@ const INITIAL_STATE = {
   editMode: false,
   dirty: false,
   searchOpen: false,
+  quickOpenOpen: false,
+  quickOpenQuery: "",
+  commandPaletteOpen: false,
+  globalSearchOpen: false,
+  globalSearchQuery: "",
+  preferencesOpen: false,
+  projectRootPath: "",
+  projectFiles: [],
+  projectTree: null,
+  projectSearchResults: [],
+  preferences: {
+    autoSaveToFile: true,
+    defaultSplitRatio: 50,
+    exportTheme: "current" as const,
+    markdownLineBreaks: true,
+  },
   toastMessage: "",
   toastVisible: false,
   recentFiles: [],
@@ -567,5 +584,145 @@ describe("appStore — auto-save draft", () => {
     get().markClean();
     expect(localStorage.getItem("mikedown-draft")).toBeNull();
     expect(get().dirty).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("appStore — project workflow state", () => {
+  beforeEach(resetStore);
+
+  it("sets project files and derives a project tree", () => {
+    const files = [
+      toProjectFile("/root/docs", "/root/docs/index.md"),
+      toProjectFile("/root/docs", "/root/docs/deep/note.md"),
+    ];
+
+    get().setProject("/root/docs", files);
+
+    expect(get().projectRootPath).toBe("/root/docs");
+    expect(get().projectFiles.map((file) => file.relativePath)).toEqual([
+      "index.md",
+      "deep/note.md",
+    ]);
+    expect(get().projectTree?.name).toBe("docs");
+    expect(get().projectTree?.children.map((child) => child.name)).toEqual([
+      "deep",
+      "index.md",
+    ]);
+  });
+
+  it("clears project state and closes project overlays", () => {
+    get().setProject("/root/docs", [toProjectFile("/root/docs", "/root/docs/index.md")]);
+    useAppStore.setState({
+      quickOpenOpen: true,
+      globalSearchOpen: true,
+      commandPaletteOpen: true,
+      projectSearchResults: [{ filePath: "/root/docs/index.md", relativePath: "index.md", lineNumber: 1, excerpt: "hello" }],
+    });
+
+    get().clearProject();
+
+    expect(get().projectRootPath).toBe("");
+    expect(get().projectFiles).toEqual([]);
+    expect(get().projectTree).toBeNull();
+    expect(get().projectSearchResults).toEqual([]);
+    expect(get().quickOpenOpen).toBe(false);
+    expect(get().globalSearchOpen).toBe(false);
+    expect(get().commandPaletteOpen).toBe(false);
+  });
+
+  it("updates quick-open state independently of document content", () => {
+    get().loadMarkdown("# Doc", "doc.md", "/root/doc.md");
+
+    get().setQuickOpenOpen(true);
+    get().setQuickOpenQuery("doc");
+
+    expect(get().quickOpenOpen).toBe(true);
+    expect(get().quickOpenQuery).toBe("doc");
+    expect(get().markdownContent).toBe("# Doc");
+  });
+
+  it("runs global search against indexed file content", () => {
+    const files = [
+      { ...toProjectFile("/root", "/root/a.md"), content: "MikeDown roadmap" },
+      { ...toProjectFile("/root", "/root/b.md"), content: "No match" },
+    ];
+    get().setProject("/root", files);
+
+    get().setGlobalSearchQuery("mikedown");
+
+    expect(get().projectSearchResults).toEqual([
+      expect.objectContaining({
+        filePath: "/root/a.md",
+        relativePath: "a.md",
+        lineNumber: 1,
+      }),
+    ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("appStore — v0.19 preferences", () => {
+  beforeEach(resetStore);
+
+  it("defaults preferences to autosave on, balanced split, current export theme, and line breaks on", () => {
+    expect(get().preferences).toEqual({
+      autoSaveToFile: true,
+      defaultSplitRatio: 50,
+      exportTheme: "current",
+      markdownLineBreaks: true,
+    });
+  });
+
+  it("persists preference updates to localStorage", () => {
+    get().setPreferences({
+      autoSaveToFile: false,
+      defaultSplitRatio: 60,
+      exportTheme: "light",
+      markdownLineBreaks: false,
+    });
+
+    expect(get().preferences).toEqual({
+      autoSaveToFile: false,
+      defaultSplitRatio: 60,
+      exportTheme: "light",
+      markdownLineBreaks: false,
+    });
+    expect(JSON.parse(localStorage.getItem("mikedown-preferences")!)).toEqual(get().preferences);
+  });
+
+  it("uses the default split preference for new Markdown documents", () => {
+    get().setPreferences({ defaultSplitRatio: 60 });
+
+    get().newMarkdownFile();
+
+    expect(get().splitRatio).toBe(60);
+    expect(localStorage.getItem("mikedown-split-ratio")).toBe("60");
+  });
+
+  it("applies the Markdown line break preference to loaded and existing content", () => {
+    get().setPreferences({ markdownLineBreaks: false });
+    get().loadMarkdown("line one\nline two", "notes.md");
+
+    expect(get().htmlContent).not.toContain("<br");
+
+    get().setPreferences({ markdownLineBreaks: true });
+
+    expect(get().htmlContent).toContain("<br");
+  });
+
+  it("skips file autosave when the autosave preference is off", async () => {
+    const { writeTextFile } = await import("@tauri-apps/plugin-fs");
+    get().loadMarkdown("# Existing", "existing.md", "/root/existing.md");
+    get().setPreferences({ autoSaveToFile: false });
+
+    vi.useFakeTimers();
+    get().setMarkdownContent("# Changed");
+    await vi.advanceTimersByTimeAsync(3100);
+    vi.useRealTimers();
+
+    expect(writeTextFile).not.toHaveBeenCalled();
   });
 });

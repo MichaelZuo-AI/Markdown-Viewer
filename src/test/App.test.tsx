@@ -28,6 +28,22 @@ const INITIAL_STATE = {
   editMode: false,
   dirty: false,
   searchOpen: false,
+  quickOpenOpen: false,
+  quickOpenQuery: "",
+  commandPaletteOpen: false,
+  globalSearchOpen: false,
+  globalSearchQuery: "",
+  preferencesOpen: false,
+  projectRootPath: "",
+  projectFiles: [],
+  projectTree: null,
+  projectSearchResults: [],
+  preferences: {
+    autoSaveToFile: true,
+    defaultSplitRatio: 50,
+    exportTheme: "current" as const,
+    markdownLineBreaks: true,
+  },
   toastMessage: "",
   toastVisible: false,
   recentFiles: [],
@@ -38,8 +54,19 @@ function resetStore() {
   try { localStorage.clear(); } catch { /* jsdom may not have localStorage */ }
 }
 
+function setTauriRuntime(enabled: boolean) {
+  if (enabled) {
+    Object.defineProperty(window, "__TAURI_INTERNALS__", {
+      value: {},
+      configurable: true,
+    });
+  } else {
+    Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+  }
+}
+
 // Helper: simulate keyboard event on window
-function pressKey(key: string, modifiers: { metaKey?: boolean; ctrlKey?: boolean } = {}) {
+function pressKey(key: string, modifiers: { metaKey?: boolean; ctrlKey?: boolean; shiftKey?: boolean } = {}) {
   fireEvent.keyDown(window, { key, ...modifiers });
 }
 
@@ -48,6 +75,7 @@ function pressKey(key: string, modifiers: { metaKey?: boolean; ctrlKey?: boolean
 describe("App — rendering", () => {
   beforeEach(() => {
     resetStore();
+    setTauriRuntime(false);
   });
 
   it("renders without crashing", () => {
@@ -88,6 +116,16 @@ describe("App — rendering", () => {
   it("renders the theme toggle button", () => {
     render(<App />);
     expect(screen.getByTitle("Toggle theme")).toBeInTheDocument();
+  });
+
+  it("skips Tauri hooks outside the Tauri runtime", async () => {
+    vi.clearAllMocks();
+    render(<App />);
+    await act(async () => {});
+
+    expect(getCurrentWindow).not.toHaveBeenCalled();
+    expect(invoke).not.toHaveBeenCalled();
+    expect(listen).not.toHaveBeenCalled();
   });
 });
 
@@ -211,6 +249,48 @@ describe("App — keyboard shortcuts", () => {
     pressKey("f", { ctrlKey: true });
     expect(useAppStore.getState().searchOpen).toBe(true);
   });
+
+  it("Cmd+Shift+F opens global search without toggling document search", () => {
+    render(<App />);
+    pressKey("f", { metaKey: true, shiftKey: true });
+    expect(useAppStore.getState().globalSearchOpen).toBe(true);
+    expect(useAppStore.getState().searchOpen).toBe(false);
+  });
+
+  it("Cmd+Shift+P opens command palette without opening quick open", () => {
+    render(<App />);
+    pressKey("p", { metaKey: true, shiftKey: true });
+    expect(useAppStore.getState().commandPaletteOpen).toBe(true);
+    expect(useAppStore.getState().quickOpenOpen).toBe(false);
+  });
+
+  it("Cmd+P opens quick open", () => {
+    render(<App />);
+    pressKey("p", { metaKey: true });
+    expect(useAppStore.getState().quickOpenOpen).toBe(true);
+  });
+
+  it("Escape closes quick open", () => {
+    useAppStore.setState({ quickOpenOpen: true, quickOpenQuery: "doc" });
+    render(<App />);
+    pressKey("Escape");
+    expect(useAppStore.getState().quickOpenOpen).toBe(false);
+    expect(useAppStore.getState().quickOpenQuery).toBe("");
+  });
+
+  it("Escape closes command palette and global search", () => {
+    useAppStore.setState({ commandPaletteOpen: true, globalSearchOpen: true });
+    render(<App />);
+    pressKey("Escape");
+    expect(useAppStore.getState().commandPaletteOpen).toBe(false);
+    expect(useAppStore.getState().globalSearchOpen).toBe(false);
+  });
+
+  it("Cmd+, opens preferences", () => {
+    render(<App />);
+    pressKey(",", { metaKey: true });
+    expect(useAppStore.getState().preferencesOpen).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -279,6 +359,7 @@ describe("App — Tauri drag-drop integration", () => {
   beforeEach(() => {
     resetStore();
     vi.clearAllMocks();
+    setTauriRuntime(true);
   });
 
   it("registers a drag-drop listener via getCurrentWindow().onDragDropEvent", async () => {
@@ -379,6 +460,7 @@ describe("App — cold start: invoke('get_opened_files')", () => {
   beforeEach(() => {
     resetStore();
     vi.clearAllMocks();
+    setTauriRuntime(true);
   });
 
   it("calls invoke with 'get_opened_files' on mount", async () => {
@@ -451,6 +533,7 @@ describe("App — warm open: listen('file-open')", () => {
   beforeEach(() => {
     resetStore();
     vi.clearAllMocks();
+    setTauriRuntime(true);
   });
 
   it("calls listen with 'file-open' on mount", async () => {

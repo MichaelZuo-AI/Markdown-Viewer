@@ -318,6 +318,11 @@ describe("parseMarkdown — standard markdown features", () => {
     expect(html).toContain("<br");
   });
 
+  it("can leave a single newline as text when breaks are disabled", () => {
+    const html = parseMarkdown("line one\nline two", { breaks: false });
+    expect(html).not.toContain("<br");
+  });
+
   it("returns a string, not undefined", () => {
     const result = parseMarkdown("# Hello");
     expect(typeof result).toBe("string");

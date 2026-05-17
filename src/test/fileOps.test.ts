@@ -12,27 +12,31 @@
 
 import { describe, it, expect, beforeEach, vi, type Mock } from "vitest";
 import { open } from "@tauri-apps/plugin-dialog";
-import { readTextFile } from "@tauri-apps/plugin-fs";
-import { openMarkdownFile, readDroppedFile } from "@/lib/fileOps";
+import { readDir, readTextFile } from "@tauri-apps/plugin-fs";
+import { openMarkdownFile, openProjectFile, openProjectFolder, readDroppedFile } from "@/lib/fileOps";
 import { useAppStore } from "@/store/appStore";
 
 // Vitest already hoisted vi.mock calls (from setup.ts) for the Tauri modules.
 // Cast the auto-mocked functions so we can call mockResolvedValueOnce etc.
 const mockOpen = open as Mock;
+const mockReadDir = readDir as Mock;
 const mockReadTextFile = readTextFile as Mock;
 
 // We spy on the store's loadMarkdown so we can assert it was called correctly
 // without running through the full Zustand + parseMarkdown path.
 let mockLoadMarkdown: ReturnType<typeof vi.fn>;
+let mockSetProject: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.clearAllMocks();
 
   // Replace the store's loadMarkdown with a spy for each test
   mockLoadMarkdown = vi.fn();
+  mockSetProject = vi.fn();
   vi.spyOn(useAppStore, "getState").mockReturnValue({
     ...useAppStore.getState(),
     loadMarkdown: mockLoadMarkdown,
+    setProject: mockSetProject,
   } as ReturnType<typeof useAppStore.getState>);
 });
 
@@ -203,5 +207,82 @@ describe("readDroppedFile", () => {
     await readDroppedFile("/some/file.md");
 
     expect(mockOpen).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("openProjectFolder", () => {
+  it("opens a native directory picker", async () => {
+    mockOpen.mockResolvedValueOnce(null);
+
+    await openProjectFolder();
+
+    expect(mockOpen).toHaveBeenCalledWith(
+      expect.objectContaining({ directory: true, multiple: false }),
+    );
+  });
+
+  it("returns early when directory picker is cancelled", async () => {
+    mockOpen.mockResolvedValueOnce(null);
+
+    await openProjectFolder();
+
+    expect(mockReadDir).not.toHaveBeenCalled();
+    expect(mockSetProject).not.toHaveBeenCalled();
+  });
+
+  it("recursively indexes supported Markdown files and ignores unsupported files", async () => {
+    mockOpen.mockResolvedValueOnce("/root/docs");
+    mockReadDir.mockImplementation(async (path: string) => {
+      if (path === "/root/docs") {
+        return [
+          { name: "index.md", isFile: true, isDirectory: false },
+          { name: "assets", isFile: false, isDirectory: true },
+          { name: "nested", isFile: false, isDirectory: true },
+        ];
+      }
+      if (path === "/root/docs/assets") {
+        return [{ name: "photo.png", isFile: true, isDirectory: false }];
+      }
+      if (path === "/root/docs/nested") {
+        return [
+          { name: "plan.markdown", isFile: true, isDirectory: false },
+          { name: "notes.txt", isFile: true, isDirectory: false },
+          { name: "app.ts", isFile: true, isDirectory: false },
+        ];
+      }
+      return [];
+    });
+    mockReadTextFile.mockImplementation(async (path: string) => `content for ${path}`);
+
+    await openProjectFolder();
+
+    expect(mockSetProject).toHaveBeenCalledOnce();
+    const [rootPath, files] = mockSetProject.mock.calls[0] as [string, Array<{ relativePath: string; content?: string }>];
+    expect(rootPath).toBe("/root/docs");
+    expect(files.map((file) => file.relativePath)).toEqual([
+      "index.md",
+      "nested/notes.txt",
+      "nested/plan.markdown",
+    ]);
+    expect(files[0].content).toBe("content for /root/docs/index.md");
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("openProjectFile", () => {
+  it("reads the selected project file and loads it into the editor", async () => {
+    mockReadTextFile.mockResolvedValueOnce("# Project file");
+
+    await openProjectFile("/root/docs/nested/plan.md");
+
+    expect(mockReadTextFile).toHaveBeenCalledWith("/root/docs/nested/plan.md");
+    expect(mockLoadMarkdown).toHaveBeenCalledWith(
+      "# Project file",
+      "plan.md",
+      "/root/docs/nested/plan.md",
+    );
   });
 });

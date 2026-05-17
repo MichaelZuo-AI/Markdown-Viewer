@@ -25,6 +25,13 @@ import Sidebar from "@/components/Sidebar";
 import SearchBar from "@/components/SearchBar";
 import Toast from "@/components/Toast";
 import RecentFiles from "@/components/RecentFiles";
+import ProjectFiles from "@/components/ProjectFiles";
+import QuickOpen from "@/components/QuickOpen";
+import CommandPalette from "@/components/CommandPalette";
+import GlobalSearch from "@/components/GlobalSearch";
+import PreferencesDialog from "@/components/PreferencesDialog";
+import { toProjectFile } from "@/lib/projectIndex";
+import * as fileOps from "@/lib/fileOps";
 import mermaid from "mermaid";
 
 // ---- helpers ----------------------------------------------------------------
@@ -44,6 +51,22 @@ const INITIAL_STATE = {
   editMode: false,
   dirty: false,
   searchOpen: false,
+  quickOpenOpen: false,
+  quickOpenQuery: "",
+  commandPaletteOpen: false,
+  globalSearchOpen: false,
+  globalSearchQuery: "",
+  preferencesOpen: false,
+  projectRootPath: "",
+  projectFiles: [],
+  projectTree: null,
+  projectSearchResults: [],
+  preferences: {
+    autoSaveToFile: true,
+    defaultSplitRatio: 50,
+    exportTheme: "current" as const,
+    markdownLineBreaks: true,
+  },
   toastMessage: "",
   toastVisible: false,
   recentFiles: [],
@@ -285,6 +308,17 @@ describe("Toolbar", () => {
   it("renders the export button", () => {
     render(<Toolbar />);
     expect(screen.getByTitle("Export HTML")).toBeInTheDocument();
+  });
+
+  it("renders the preferences button", () => {
+    render(<Toolbar />);
+    expect(screen.getByTitle("Preferences")).toBeInTheDocument();
+  });
+
+  it("clicking Preferences opens the preferences dialog", () => {
+    render(<Toolbar />);
+    fireEvent.click(screen.getByTitle("Preferences"));
+    expect(useAppStore.getState().preferencesOpen).toBe(true);
   });
 });
 
@@ -701,6 +735,257 @@ describe("Sidebar", () => {
   it("renders the Toc 'Contents' section", () => {
     render(<Sidebar />);
     expect(screen.getByText("Contents")).toBeInTheDocument();
+  });
+
+  it("renders an 'Open Folder' button", () => {
+    render(<Sidebar />);
+    expect(screen.getByRole("button", { name: /open folder/i })).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("ProjectFiles", () => {
+  beforeEach(resetStore);
+
+  it("returns null when no project folder is open", () => {
+    const { container } = render(<ProjectFiles />);
+    expect(container.firstElementChild).toBeNull();
+  });
+
+  it("renders project files from the current project tree", () => {
+    useAppStore.getState().setProject("/root/docs", [
+      toProjectFile("/root/docs", "/root/docs/index.md"),
+      toProjectFile("/root/docs", "/root/docs/deep/note.md"),
+    ]);
+
+    render(<ProjectFiles />);
+
+    expect(screen.getByText("docs")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /index\.md/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /note\.md/i })).toBeInTheDocument();
+  });
+
+  it("opens a project file when clicking a file row", () => {
+    const openProjectFile = vi.spyOn(fileOps, "openProjectFile").mockResolvedValueOnce();
+    useAppStore.getState().setProject("/root/docs", [
+      toProjectFile("/root/docs", "/root/docs/index.md"),
+    ]);
+
+    render(<ProjectFiles />);
+    fireEvent.click(screen.getByRole("button", { name: /index\.md/i }));
+
+    expect(openProjectFile).toHaveBeenCalledWith("/root/docs/index.md");
+    openProjectFile.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("QuickOpen", () => {
+  beforeEach(resetStore);
+
+  it("returns null when quick open is closed", () => {
+    const { container } = render(<QuickOpen />);
+    expect(container.firstElementChild).toBeNull();
+  });
+
+  it("filters project files by query", () => {
+    useAppStore.getState().setProject("/root/docs", [
+      toProjectFile("/root/docs", "/root/docs/index.md"),
+      toProjectFile("/root/docs", "/root/docs/deep/roadmap.md"),
+    ]);
+    useAppStore.setState({ quickOpenOpen: true, quickOpenQuery: "road" });
+
+    render(<QuickOpen />);
+
+    expect(screen.getByPlaceholderText("Open file...")).toBeInTheDocument();
+    expect(screen.getByText("deep/roadmap.md")).toBeInTheDocument();
+    expect(screen.queryByText("index.md")).toBeNull();
+  });
+
+  it("updates the quick-open query while typing", () => {
+    useAppStore.setState({ quickOpenOpen: true });
+    render(<QuickOpen />);
+
+    fireEvent.change(screen.getByPlaceholderText("Open file..."), {
+      target: { value: "plan" },
+    });
+
+    expect(useAppStore.getState().quickOpenQuery).toBe("plan");
+  });
+
+  it("opens a selected project file and closes quick open", () => {
+    const openProjectFile = vi.spyOn(fileOps, "openProjectFile").mockResolvedValueOnce();
+    useAppStore.getState().setProject("/root/docs", [
+      toProjectFile("/root/docs", "/root/docs/deep/roadmap.md"),
+    ]);
+    useAppStore.setState({ quickOpenOpen: true });
+
+    render(<QuickOpen />);
+    fireEvent.click(screen.getByRole("button", { name: /deep\/roadmap\.md/i }));
+
+    expect(openProjectFile).toHaveBeenCalledWith("/root/docs/deep/roadmap.md");
+    expect(useAppStore.getState().quickOpenOpen).toBe(false);
+    openProjectFile.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("CommandPalette", () => {
+  beforeEach(resetStore);
+
+  it("returns null when the command palette is closed", () => {
+    const { container } = render(<CommandPalette />);
+    expect(container.firstElementChild).toBeNull();
+  });
+
+  it("renders common commands when open", () => {
+    useAppStore.setState({ commandPaletteOpen: true });
+    render(<CommandPalette />);
+
+    expect(screen.getByPlaceholderText("Run command...")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /new markdown/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /quick open/i })).toBeInTheDocument();
+  });
+
+  it("filters commands by query", () => {
+    useAppStore.setState({ commandPaletteOpen: true });
+    render(<CommandPalette />);
+
+    fireEvent.change(screen.getByPlaceholderText("Run command..."), {
+      target: { value: "theme" },
+    });
+
+    expect(screen.getByRole("button", { name: /toggle theme/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /new markdown/i })).toBeNull();
+  });
+
+  it("executes New Markdown and closes the palette", () => {
+    useAppStore.setState({ commandPaletteOpen: true });
+    render(<CommandPalette />);
+
+    fireEvent.click(screen.getByRole("button", { name: /new markdown/i }));
+
+    expect(useAppStore.getState().fileName).toBe("Untitled.md");
+    expect(useAppStore.getState().commandPaletteOpen).toBe(false);
+  });
+
+  it("executes Quick Open from the palette", () => {
+    useAppStore.setState({ commandPaletteOpen: true });
+    render(<CommandPalette />);
+
+    fireEvent.click(screen.getByRole("button", { name: /quick open/i }));
+
+    expect(useAppStore.getState().commandPaletteOpen).toBe(false);
+    expect(useAppStore.getState().quickOpenOpen).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("GlobalSearch", () => {
+  beforeEach(resetStore);
+
+  it("returns null when global search is closed", () => {
+    const { container } = render(<GlobalSearch />);
+    expect(container.firstElementChild).toBeNull();
+  });
+
+  it("updates project search results as the user types", () => {
+    useAppStore.getState().setProject("/root/docs", [
+      { ...toProjectFile("/root/docs", "/root/docs/a.md"), content: "MikeDown workflow" },
+      { ...toProjectFile("/root/docs", "/root/docs/b.md"), content: "Other text" },
+    ]);
+    useAppStore.setState({ globalSearchOpen: true });
+
+    render(<GlobalSearch />);
+    fireEvent.change(screen.getByPlaceholderText("Search project..."), {
+      target: { value: "mikedown" },
+    });
+
+    expect(screen.getByText("a.md")).toBeInTheDocument();
+    expect(screen.getByText(/line 1/i)).toBeInTheDocument();
+    expect(screen.getByText("MikeDown workflow")).toBeInTheDocument();
+  });
+
+  it("opens a clicked search result and closes global search", () => {
+    const openProjectFile = vi.spyOn(fileOps, "openProjectFile").mockResolvedValueOnce();
+    useAppStore.getState().setProject("/root/docs", [
+      { ...toProjectFile("/root/docs", "/root/docs/a.md"), content: "MikeDown workflow" },
+    ]);
+    useAppStore.setState({ globalSearchOpen: true });
+
+    render(<GlobalSearch />);
+    fireEvent.change(screen.getByPlaceholderText("Search project..."), {
+      target: { value: "mikedown" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /a\.md line 1/i }));
+
+    expect(openProjectFile).toHaveBeenCalledWith("/root/docs/a.md");
+    expect(useAppStore.getState().globalSearchOpen).toBe(false);
+    openProjectFile.mockRestore();
+  });
+});
+
+// ---------------------------------------------------------------------------
+
+describe("PreferencesDialog", () => {
+  beforeEach(resetStore);
+
+  it("returns null when preferences are closed", () => {
+    const { container } = render(<PreferencesDialog />);
+    expect(container.firstElementChild).toBeNull();
+  });
+
+  it("renders current preference controls when open", () => {
+    useAppStore.setState({ preferencesOpen: true });
+    render(<PreferencesDialog />);
+
+    expect(screen.getByRole("dialog", { name: /preferences/i })).toBeInTheDocument();
+    expect(screen.getByLabelText("Theme")).toBeInTheDocument();
+    expect(screen.getByLabelText("Keybindings")).toBeInTheDocument();
+    expect(screen.getByLabelText("Auto-save to file")).toBeChecked();
+    expect(screen.getByLabelText("Default split ratio")).toHaveValue(50);
+    expect(screen.getByLabelText("Export theme")).toHaveValue("current");
+  });
+
+  it("updates theme and keybinding selections", () => {
+    useAppStore.setState({ preferencesOpen: true });
+    render(<PreferencesDialog />);
+
+    fireEvent.change(screen.getByLabelText("Theme"), { target: { value: "light" } });
+    fireEvent.change(screen.getByLabelText("Keybindings"), { target: { value: "vim" } });
+
+    expect(useAppStore.getState().theme).toBe("light");
+    expect(useAppStore.getState().keybindingMode).toBe("vim");
+  });
+
+  it("updates autosave, split ratio, line breaks, and export defaults", () => {
+    useAppStore.setState({ preferencesOpen: true });
+    render(<PreferencesDialog />);
+
+    fireEvent.click(screen.getByLabelText("Auto-save to file"));
+    fireEvent.change(screen.getByLabelText("Default split ratio"), { target: { value: "62" } });
+    fireEvent.click(screen.getByLabelText("Markdown line breaks"));
+    fireEvent.change(screen.getByLabelText("Export theme"), { target: { value: "dark" } });
+
+    expect(useAppStore.getState().preferences).toEqual({
+      autoSaveToFile: false,
+      defaultSplitRatio: 62,
+      exportTheme: "dark",
+      markdownLineBreaks: false,
+    });
+  });
+
+  it("closes from the close button", () => {
+    useAppStore.setState({ preferencesOpen: true });
+    render(<PreferencesDialog />);
+
+    fireEvent.click(screen.getByRole("button", { name: /close preferences/i }));
+
+    expect(useAppStore.getState().preferencesOpen).toBe(false);
   });
 });
 

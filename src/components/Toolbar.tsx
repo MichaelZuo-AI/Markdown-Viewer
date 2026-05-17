@@ -14,6 +14,7 @@ export default function Toolbar() {
   const toggleTheme = useAppStore((s) => s.toggleTheme);
   const toggleEditMode = useAppStore((s) => s.toggleEditMode);
   const toggleSearch = useAppStore((s) => s.toggleSearch);
+  const setPreferencesOpen = useAppStore((s) => s.setPreferencesOpen);
   const cycleKeybindingMode = useAppStore((s) => s.cycleKeybindingMode);
   const newMarkdownFile = useAppStore((s) => s.newMarkdownFile);
   const zoom = useAppStore((s) => s.zoom);
@@ -37,6 +38,9 @@ export default function Toolbar() {
       <span className="word-count">{statsText}</span>
       <button className="tb-btn" title="Search" aria-label="Search" onClick={toggleSearch}>
         &#x1F50D;
+      </button>
+      <button className="tb-btn" title="Preferences" aria-label="Preferences" onClick={() => setPreferencesOpen(true)}>
+        Prefs
       </button>
       <button
         className={`tb-btn${editMode ? " tb-btn-active" : ""}`}

@@ -1,7 +1,8 @@
 import { useAppStore } from "@/store/appStore";
-import { openMarkdownFile } from "@/lib/fileOps";
+import { openMarkdownFile, openProjectFolder } from "@/lib/fileOps";
 import Toc from "./Toc";
 import RecentFiles from "./RecentFiles";
+import ProjectFiles from "./ProjectFiles";
 
 export default function Sidebar() {
   const collapsed = useAppStore((s) => s.sidebarCollapsed);
@@ -19,10 +20,14 @@ export default function Sidebar() {
           <button className="open-btn" onClick={newMarkdownFile}>
             <span>+</span> New Markdown
           </button>
+          <button className="open-btn" onClick={openProjectFolder}>
+            <span>/</span> Open Folder
+          </button>
           <button className="open-btn" onClick={openMarkdownFile}>
             <span>&#x1F4C2;</span> Open File
           </button>
         </div>
+        <ProjectFiles />
         <RecentFiles />
         <Toc />
         <button

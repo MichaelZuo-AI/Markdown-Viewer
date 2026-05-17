@@ -109,7 +109,10 @@ export async function exportToHtml() {
   });
   if (!selected) return;
 
-  const isDark = store.theme === "dark";
+  const exportTheme = store.preferences.exportTheme === "current"
+    ? store.theme
+    : store.preferences.exportTheme;
+  const isDark = exportTheme === "dark";
   const renderedHtml = await getExportContentHtml(store.htmlContent);
   const html = `<!DOCTYPE html>
 <html lang="en"${isDark ? "" : ' data-theme="light"'}>

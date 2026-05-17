@@ -175,10 +175,10 @@ function renderCallouts(html: string): string {
   );
 }
 
-export function parseMarkdown(content: string): string {
+export function parseMarkdown(content: string, options: { breaks?: boolean } = {}): string {
   idCounts = new Map();
   const processed = renderMath(content);
-  const raw = marked.parse(processed) as string;
+  const raw = marked.parse(processed, { breaks: options.breaks ?? true, gfm: true }) as string;
   const sanitized = DOMPurify.sanitize(raw, {
     ADD_ATTR: ["data-copy", "data-footnote-ref", "data-footnote-backref", "aria-describedby", "aria-label"],
     ADD_DATA_URI_TAGS: ["img"],
