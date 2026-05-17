@@ -90,12 +90,34 @@ The first build takes a few minutes to compile Rust dependencies. Subsequent bui
 
 ### v0.19.0
 
-- Add project folder workflow with recursive Markdown/text indexing, sidebar file tree, and project file loading
-- Add quick open (`Cmd+P`) with fuzzy path matching
-- Add command palette (`Cmd+Shift+P`) for common actions
-- Add project-wide search (`Cmd+Shift+F`) across indexed file contents
-- Add preferences dialog (`Cmd+,`) for theme, keybindings, autosave, split defaults, line breaks, and export theme
+- Add project folder workflow with recursive Markdown/text indexing, sidebar file tree, quick-open loading, and project search
+- Add command-first navigation surfaces: quick open (`Cmd+P`), command palette (`Cmd+Shift+P`), project search (`Cmd+Shift+F`), and preferences (`Cmd+,`)
+- Add preferences for theme, editor keybindings, file autosave, default split ratio, Markdown line-break rendering, and HTML export theme
+- Respect export theme preferences when writing standalone HTML exports
+- Guard Tauri-only hooks so browser/Vite development renders without native-runtime crashes
+- Add the Tauri `fs:allow-read-dir` permission required for project folder indexing in the desktop shell
 - Add `CONVENTIONS.md` to back the repo-local agent guide
+
+### v0.18.3
+
+- Update CI, release, and automation workflows to Node 24-era GitHub Actions versions
+- Keep the release pipeline aligned with current `actions/checkout`, `actions/setup-node`, and `pnpm/action-setup` versions
+
+### v0.18.2
+
+- Expand the Markdown preview reading width from a narrow fixed column to a responsive wide layout
+- Preserve centered reading ergonomics while using available desktop space more effectively
+
+### v0.18.1
+
+- Reset new Markdown documents to a balanced split editor layout instead of inheriting a previously narrowed pane
+- Persist the balanced split ratio for the new-document flow while preserving user-controlled split behavior elsewhere
+
+### v0.18.0
+
+- Refresh the app shell into the command-atelier visual direction
+- Replace the empty-state document icon with a sharper `MD` mark
+- Preserve the quiet Markdown reading surface while strengthening the surrounding desktop editor chrome
 
 ### v0.15.0
 
